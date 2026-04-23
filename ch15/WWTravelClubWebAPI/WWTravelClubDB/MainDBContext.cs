@@ -4,14 +4,11 @@ using WWTravelClubDB.Models;
 
 namespace WWTravelClubDB
 {
-    public class MainDbContext: DbContext
+    public class MainDbContext(DbContextOptions options) : DbContext(options)
     {
         public DbSet<Package> Packages { get; set; }
         public DbSet<Destination> Destinations { get; set; }
-        public MainDbContext(DbContextOptions options)
-            : base(options)
-        {
-        }
+        
         protected override void OnModelCreating(ModelBuilder builder)
         {
             builder.Entity<Destination>()

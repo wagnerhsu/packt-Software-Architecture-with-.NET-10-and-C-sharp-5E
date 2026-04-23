@@ -10,15 +10,13 @@ using WorkerMDBDriver.Models;
 
 namespace DBDriver
 {
-    internal class MainDbContext : DbContext, IUnitOfWork
+    internal class MainDbContext(DbContextOptions options) : DbContext(options), IUnitOfWork
     {
         public DbSet<DayTotal> DayTotals { get; set; }
         public DbSet<QueueItem> QueueItems { get; set; }
         public DbSet<Purchase> Purchases { get; set; }
         public MainDbContext(DbContextOptions options)
-        : base(options)
-        {
-        }
+       
         protected override void OnModelCreating(ModelBuilder
         builder)
         {
