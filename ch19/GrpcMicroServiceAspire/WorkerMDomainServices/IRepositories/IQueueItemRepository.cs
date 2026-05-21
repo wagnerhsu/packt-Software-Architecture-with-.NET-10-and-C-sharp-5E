@@ -11,6 +11,6 @@ namespace WorkerMDomainServices.IRepositories
     {
         public Task<IList<QueueItemAggregate>> Top(int n, int minutesBlocked);
         public Task Dequeue(IEnumerable<QueueItemAggregate> items);
-        public QueueItemAggregate Enqueue(PurchaseInfoDTO mssageInfo);
+        public QueueItemAggregate Enqueue(PurchaseInfoDTO messageInfo);
     }
 }
