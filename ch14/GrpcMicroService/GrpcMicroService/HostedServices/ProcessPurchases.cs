@@ -19,60 +19,60 @@ namespace GrpcMicroService.HostedServices
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             bool queueEmpty = false;
-            while (!stoppingToken.IsCancellationRequested)
+            while (!stoppingToken.IsCancellationRequested && !queueEmpty)
             {
-                while (!queueEmpty && !stoppingToken.IsCancellationRequested)
+                using (var scope = _services.CreateScope())
                 {
-                    using (var scope = _services.CreateScope())
+                    IQueueItemRepository queue = scope.ServiceProvider.GetRequiredService<IQueueItemRepository>();
+                    IUnitOfWork uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+                    var toProcess = await queue.Top(10, MinuteBlocked);
+                    if (toProcess.Count > 0)
                     {
-                        IQueueItemRepository queue = scope.ServiceProvider.GetRequiredService<IQueueItemRepository>();
-                        IUnitOfWork uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-                        var toProcess = await queue.Top(10, MinuteBlocked);
-                        if (toProcess.Count > 0)
+                        Task<QueueItemAggregate>[] tasks = new Task<QueueItemAggregate>[toProcess.Count];
+                        for (int i = 0; i < tasks.Length; i++)
                         {
-                            Task<QueueItemAggregate>[] tasks = new Task<QueueItemAggregate>[toProcess.Count];
-                            for (int i = 0; i < tasks.Length; i++)
+                            var toExecute = async () =>
                             {
-                                var toExecute = async () =>
+                                QueueItemAggregate item = toProcess[i];
+                                using (var sc = _services.CreateScope())
                                 {
-                                    QueueItemAggregate item = toProcess[i];
-                                    using (var sc = _services.CreateScope())
+                                    var handler = sc.ServiceProvider.GetRequiredService<ICommandHandler<PurchaseCommand>>();
+                                    try
                                     {
-                                        var handler = sc.ServiceProvider.GetRequiredService<ICommandHandler<PurchaseCommand>>();
-                                        try
+                                        await handler.HandleAsync(new PurchaseCommand(new PurchaseInfoDTO
                                         {
-                                            await handler.HandleAsync(new PurchaseCommand(new PurchaseInfoDTO
-                                            {
-                                                Cost = item.Cost,
-                                                Location = item.Location,
-                                                MessageId = item.MessageId,
-                                                PurchaseTime = item.PurchaseTime,
-                                                Time = item.Time
-                                            }));
-                                            return item;
-                                        }
-                                        catch
-                                        {
-                                            return null;
-                                        }
-                                    } 
-                                };
-                                tasks[i] = toExecute();
-                            }
-                            await Task.WhenAll(tasks);
-                            var processed = tasks.Select(m => m.Result).Where(m => m != null).ToList();
-                            if (processed.Count > 0)
-                            {
-                                await queue.Dequeue(processed);
-                                await uow.SaveEntitiesAsync();
-                            }
-                            
+                                            Cost = item.Cost,
+                                            Location = item.Location,
+                                            MessageId = item.MessageId,
+                                            PurchaseTime = item.PurchaseTime,
+                                            Time = item.Time
+                                        }));
+                                        return item;
+                                    }
+                                    catch
+                                    {
+                                        return null;
+                                    }
+                                }
+                            };
+                            tasks[i] = toExecute();
                         }
-                        else queueEmpty = true;
+                        await Task.WhenAll(tasks);
+                        var processed = tasks.Select(m => m.Result).Where(m => m != null).ToList();
+                        if (processed.Count > 0)
+                        {
+                            await queue.Dequeue(processed);
+                            await uow.SaveEntitiesAsync();
+                        }
+
                     }
+                    else queueEmpty = true;
                 }
-                await Task.Delay(100, stoppingToken);
-                queueEmpty = false;
+                if (queueEmpty)
+                {
+                    await Task.Delay(100, stoppingToken);
+                    queueEmpty = false;
+                }
             }
         }
     }
